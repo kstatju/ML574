@@ -1,0 +1,698 @@
+---
+title: "CS574"
+author: "Kanak Choudhury"
+date: "2/13/2020"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(glmnet)
+library(ggplot2)
+```
+
+## Problem 2
+
+```{r}
+path = "D:\\ISU\\COMS 574 - Introduction to Machine Learning\\HW\\HW1\\"
+
+dt = read.csv(paste(path, "housingdata.csv", sep = ""), header = T)
+varname = names(dt)
+
+```
+
+
+## (a)
+
+```{r}
+for (i in c(1:13)){
+ print(ggplot(dt, aes_string(x=varname[i], y=varname[14])) + 
+         ylim(0,max(dt$MEDV+2))+
+         ggtitle(varname[i]) +
+         geom_point())
+}
+```
+
+Based on scatter plot, LSTAT (% lower status of the population) (negative relation) and RM (average number of rooms per dwelling) (positive relation) have moderate (highest among the features) linear association (-0.74 and 0.69) with MEDV (Median value of owner-occupied homes in $1000’s). On the other hand, B ($1000(Bk−0.63)^2$ where $Bk$ is the proportion of black residents by town) has the least relation with the response variable. Though, CHAS is a binary variable, it seems that there is a high relation with response variable. It is clear from the scatter plot that there is nonlinear or quadratic relation between DIS (weighted distances to ﬁve Boston employment centres) and MEDV. All other variables have some relation with response variable. However, with respect to high order space (interaction with other variables or higher order) there might have some strong relation with the response variable.
+
+
+## (b)
+
+
+```{r}
+dt_train = dt[1:400,]
+dt_test = dt[401:dim(dt)[1],]
+varn = c("AGE", "INDUS", "NOX", "RM", "TAX")
+
+reg_res = list()
+tr_mse = list()
+k = 1
+for (i in c(0:length(varn))){
+  comb = combn(varn, i)
+  for (j in c(1:dim(comb)[2])){
+    if (dim(comb)[1]==0){
+      formu = "MEDV ~ 1"
+      comb = matrix(c("Intercept"), nrow = 1, ncol = 1)
+    } else{
+      formu = paste("MEDV ~ 1", paste((comb[,j]), collapse = "+"), sep = "+")  
+    }
+    
+    reg_res[[k]] = lm(as.formula(formu), data = dt_train)
+    tr_mse[[k]] = list(i = i, var = paste((comb[,j]), collapse = ","), 
+                       tr_mse = mean(reg_res[[k]]$residuals^2), 
+                       vel_mse = mean((predict(reg_res[[k]], newdata = dt_test)-dt_test$MEDV)^2))
+    k = k+1
+  }
+  
+}
+
+res = do.call(rbind.data.frame, tr_mse)
+names(res) = c("subset", "variables", "tr_mse", "ts_mse")
+
+trset = NULL
+for (i in c(0:length(varn))){
+  aa = which(res$tr_mse == res[res$subset == i,][which.min(res[res$subset == i,3]),3])
+  trset = rbind(trset, res[aa,])
+  res1 = reg_res[[aa]]
+  len1 = length(res1$coefficients)
+  if (i==0){
+    print(paste("For subset model ", i, ":   y^hat = ", round(res1$coefficients[1], 3) ,
+                "   with MSE = ", round(res[aa,3],3))) 
+  } else {
+    
+    print(paste("For subset model ", i, ":   y^hat = ", round(res1$coefficients[1], 3), " + " ,
+              paste(round(res1$coefficients[2:len1], 3), 
+                    names(res1$coefficients)[2:len1], sep = " * ", collapse = " + "),
+      "   with training MSE = ", round(res[aa, 3],3)))
+  }
+}
+
+print(trset)
+
+
+aa = which.min(res$tr_mse)
+res1 = reg_res[[aa]]
+len1 = length(res1$coefficients)
+print(paste("For subset model ", res[aa,]$subset, ":   y^hat = ", round(res1$coefficients[1], 3), 
+            " + " , paste(round(res1$coefficients[2:len1], 3), 
+                  names(res1$coefficients)[2:len1], sep = " * ", collapse = " + "),
+    "   with training MSE = ", round(res[aa, 3],3), " and testing MSE = ", round(res[aa, 4],3)))
+
+aa = which.min(res$ts_mse)
+res1 = reg_res[[aa]]
+len1 = length(res1$coefficients)
+print(paste("For subset model ", res[aa,]$subset, ":   y^hat = ", round(res1$coefficients[1], 3), 
+            " + " ,
+            paste(round(res1$coefficients[2:len1], 3), 
+                  names(res1$coefficients)[2:len1], sep = " * ", collapse = " + "),
+    "   with training MSE = ", round(res[aa, 3],3), " and testing MSE = ", round(res[aa, 4],3)))
+
+```
+
+The best fitting linear model for every subset of AGE, INDUS, NOX, RM, TAX using the first n = 400 samples based on training MSE is the model with all five features. However, based on test MSE, the based model is the model with variables AGE, NOX and TAX.
+
+
+## (c)
+
+### (i)
+
+
+```{r}
+valset = NULL
+for (i in c(0:length(varn))){
+  aa = which(res$ts_mse == res[res$subset == i,][which.min(res[res$subset == i,4]),4])
+  valset = rbind(valset, res[aa,])
+  res1 = reg_res[[aa]]
+  len1 = length(res1$coefficients)
+  if (i==0){
+    print(paste("For subset model ", i, ":   y^hat = ", round(res1$coefficients[1], 3) ,
+                "   with MSE = ", round(res[aa,4],3))) 
+  } else {
+    
+    print(paste("For subset model ", i, ":   y^hat = ", round(res1$coefficients[1], 3), " + " ,
+                paste(round(res1$coefficients[2:len1], 3), 
+                      names(res1$coefficients)[2:len1], sep = " * ", collapse = " + "),
+                "   with validation MSE = ", round(res[aa,4],3)))
+  }
+}
+
+print(valset)
+
+```
+
+
+ The best subset was for each $i$ is given in the above table.
+ 
+ 
+These six models are completely nested with largest order model. If we consider zero for the appropriate parameter(s), we can get any lower order model.
+
+
+
+### (ii)
+
+```{r}
+plot(trset$subset, trset$tr_mse, type = "l", xlab = "i", lwd = 2, col = 2,
+     ylab = "Training Loss (MSE)")
+title("Training loss - best subsets")
+
+
+plot(valset$subset, valset$ts_mse, type = "l", xlab = "i", lwd = 2, col = 2,
+     ylab = "Validation Loss (MSE)")
+title("Validation loss - best subsets")
+
+```
+
+
+As the number of features increases in the model, the training MSE decreases. However, based on the validation loss, it looks like "U" shaped. That indicates that more complex model is not always better for prediction.
+
+
+### (iii)
+
+
+```{r}
+reg_res_cp = list()
+tr_mse_cp = list()
+k = 1
+for (i in c(0:length(varn))){
+  comb = combn(varn, i)
+  for (j in c(1:dim(comb)[2])){
+    if (dim(comb)[1]==0){
+      formu = "MEDV ~ 1"
+      comb = matrix(c("Intercept"), nrow = 1, ncol = 1)
+    } else{
+      formu = paste("MEDV ~ 1", paste((comb[,j]), collapse = "+"), sep = "+")  
+    }
+    
+    reg_res_cp[[k]] = lm(as.formula(formu), data = dt)
+    trmse = mean(reg_res_cp[[k]]$residuals^2)
+    tr_mse_cp[[k]] = list(i = i, var = paste((comb[,j]), collapse = ","), 
+                       tr_mse_cp = trmse)
+    k = k+1
+  }
+  
+}
+
+res_cp = do.call(rbind.data.frame, tr_mse_cp)
+names(res_cp) = c("subset", "variables", "tr_mse")
+res_cp$cp = res_cp$tr_mse + 2*res_cp$subset*res_cp$tr_mse[nrow(res_cp)] / nrow(dt)
+
+
+trset_cp = NULL
+for (i in c(0:length(varn))){
+  aa = which(res_cp$cp == res_cp[res_cp$subset == i,][which.min(res_cp[res_cp$subset == i,4]),4])
+  trset_cp = rbind(trset_cp, res_cp[aa,])
+  res_cp1 = reg_res_cp[[aa]]
+  len1 = length(res_cp1$coefficients)
+  if (i==0){
+    print(paste("For subset model ", i, ":   y^hat = ", round(res_cp1$coefficients[1], 3) ,
+                "   with MSE = ", round(res_cp[aa,3],3))) 
+  } else {
+    
+    print(paste("For subset model ", i, ":   y^hat = ", round(res_cp1$coefficients[1], 3), " + " ,
+                paste(round(res_cp1$coefficients[2:len1], 3), 
+                      names(res_cp1$coefficients)[2:len1], sep = " * ", collapse = " + "),
+                "   with Mallow’s Cp = ", round(res_cp[aa, 4],3)))
+  }
+}
+
+
+aa = which.min(res_cp$cp)
+res_cp1 = reg_res_cp[[aa]]
+len1 = length(res_cp1$coefficients)
+print(paste("For subset model ", res_cp$subset[aa], ":   y^hat = ", round(res_cp1$coefficients[1], 3), " + " ,
+            paste(round(res_cp1$coefficients[2:len1], 3), 
+                  names(res_cp1$coefficients)[2:len1], sep = " * ", collapse = " + "),
+            "   with Mallow’s Cp = ", round(res_cp[aa, 4],3)))
+  
+    
+plot(trset_cp$subset, trset_cp$cp, type = "l", xlab = "i", lwd = 2, col = 2,
+     ylab = "Mallow’s Cp")
+title("Mallow’s Cp - best subsets")
+
+```
+
+
+The best fitting linear model for every subset of AGE, INDUS, NOX, RM, TAX using all the samples based on $C_p$ is the model with variables AGE, RM and TAX.
+
+
+Plot using total complexity $C_p$ and plot using validation set MSE show the same pattern. $C_p$ gives more weight to the model with higher complexity. However, That does not mean $C_p$ and validation set MSE behave the same way. It actually depends on data. For some data set, these two methods can provide the same result. However, if prediction is the main purpose of study, model section based on validation set total loss would be better.
+
+
+
+### (iv)
+
+
+#### (i) - (iii)
+
+```{r}
+
+dt_train = dt[1:400,]
+dt_test = dt[401:dim(dt)[1],]
+varn = c("AGE", "INDUS", "NOX", "RM", "TAX")
+
+lambda = 0
+l2_res = NULL
+
+loop = TRUE
+
+while (loop) {
+  a = glmnet(x = as.matrix(dt_train[,varn]), y = dt_train[,"MEDV"], standardize=FALSE, 
+             alpha = 0, lambda = lambda)
+  pred = predict(a, as.matrix(dt_test[,varn]))
+  l2 = mean((dt_test$MEDV - pred)^2) + lambda * sum(a$beta^2)
+  l2_res = rbind(l2_res, c(a$lambda, l2))
+  if (lambda > 1400 & lambda <1600){
+    lambda = lambda + 0.05
+  }else {
+    lambda = lambda + 100
+  }
+  
+  if(sum(a$beta^2) < 1e-5 | lambda > 50000) loop = FALSE
+}
+
+l2_res = as.data.frame(l2_res)
+plot(l2_res$V1, l2_res$V2, type = "l", xlab = "Lambda", lwd = 2, col = 2,
+     ylab = "L2 total complexity")
+title("Ridge (L2) Regression")
+
+aa = which.min(l2_res$V2)
+a = glmnet(x = as.matrix(dt_train[,varn]), y = dt_train[,"MEDV"], standardize=FALSE, 
+             alpha = 0, lambda = l2_res[aa,1])
+pred = predict(a, as.matrix(dt_test[,varn]))
+l2 = mean((dt_test$MEDV - pred)^2)
+
+print(paste("Model with lambda = ", round(l2_res[aa,1],3), ":   y^hat = ", round(a$a0, 3), 
+            " + " ,
+            paste(round(a$beta, 3), 
+                  row.names(a$beta), sep = " * ", collapse = " + "),
+    "   with testing MSE = ", round(l2,3)))
+
+print(paste("Model with lambda = ", l2_res[aa,1], " has lowest validation MSE, ", round(l2_res[aa,2],3)))
+```
+
+From this plot, we can see that model with $\lambda = 1503.3$ with AGE, INDUS, RM, TAX variables has the smallest validation set total complexity. However, using $C_p$ and validation set MSE, we got smaller set model though both were different.
+
+
+#### (iv)
+
+```{r}
+lambda = 0
+l1_res = NULL
+
+loop = TRUE
+
+while (loop) {
+  a = glmnet(x = as.matrix(dt_train[,varn]), y = dt_train[,"MEDV"], standardize=FALSE, 
+             alpha = 1, lambda = lambda)
+  pred = predict(a, as.matrix(dt_test[,varn]))
+  l1 = mean((dt_test$MEDV - pred)^2) + lambda * sum(abs(a$beta))
+  l1_res = rbind(l1_res, c(a$lambda, l1))
+  lambda = lambda + 0.05
+  if(sum(abs(a$beta)) < 1e-8) loop = FALSE
+}
+
+l1_res = as.data.frame(l1_res)
+plot(l1_res$V1, l1_res$V2, type = "l", xlab = "Lambda", lwd = 2, col = 2,
+     ylab = "L1 total complexity")
+title("L1 Panalty")
+
+aa = which.min(l1_res$V2)
+a = glmnet(x = as.matrix(dt_train[,varn]), y = dt_train[,"MEDV"], standardize=FALSE, 
+             alpha = 1, lambda = l1_res[aa,1])
+pred = predict(a, as.matrix(dt_test[,varn]))
+mmse = mean((dt_test$MEDV - pred)^2)
+
+print(paste("Model with lambda = ", round(l1_res[aa,1],3), ":   y^hat = ", round(a$a0, 3), 
+            " + " ,
+            paste(round(a$beta, 3), 
+                  row.names(a$beta), sep = " * ", collapse = " + "),
+    "   with testing MSE = ", round(mmse,3)))
+
+print(paste("Model with lambda = ", round(l1_res[aa,1], 3), " has lowest validation MSE, ", round(mmse,3)))
+
+
+```
+
+LASSO model also shows the same patter as Ridge regression. However, LASSO model selects smaller set variables that the Ridge regression. It includes only AGE, INDUS, TAX variables. It is important to mention that model selection based on different criteria selects different sets of variables in the respective best model.
+
+
+
+#### (v)
+
+It is important to normalize all features when using L1 or L2 penalty for model estimation. Because, estimated parameters have a same unit as the corresponding variables and when we use these estimated parameters as the penalty factor, it will have high influence if the variable represents with very high values. As a result, prediction based on unnormalize features might be misleading. 
+
+
+
+
+### (d)
+
+
+#### (i)
+
+```{r}
+dt_train = dt[1:400,]
+dt_test = dt[401:dim(dt)[1],]
+varn = c("CRIM",    "ZN",      "INDUS",   "CHAS",    "NOX",     "RM",
+         "AGE",     "DIS",     "RAD",     "TAX",     "PTRATIO", "B" ,      "LSTAT")
+
+
+varinclude = c()
+varexlude = varn
+fi_res = list()
+fi_reg = list()
+k=2
+
+formu = "MEDV ~ 1"
+tem_reg = lm(as.formula(formu), data = dt_train)
+temp_res = list(0, "intercept", 
+                     mean(tem_reg$residuals^2), 
+                     mean((predict(tem_reg, newdata = dt_test)-dt_test$MEDV)^2),
+                     formu)
+
+
+fi_reg[[1]] = tem_reg
+fi_res[[1]] = c(temp_res)
+
+
+while (!is.null(varexlude) & length(varexlude)>0) {
+  tem_reg = list()
+  temp_res = list()
+ 
+  
+  for (i in c(1:length(varexlude))){
+    
+    if (is.null(varinclude)){
+      formu = paste("MEDV ~ 1", varexlude[i], sep = "+")  
+    } else {
+      formu = paste("MEDV ~ 1", paste(varinclude, collapse = "+"), varexlude[i], sep = "+")    
+    }
+  
+    tem_reg[[i]] = lm(as.formula(formu), data = dt_train)
+    temp_res[[i]] = list(length(varinclude)+1, varexlude[i], 
+                 mean(tem_reg[[i]]$residuals^2), 
+                 mean((predict(tem_reg[[i]], newdata = dt_test)-dt_test$MEDV)^2),
+                 formu)
+    
+  }
+  
+  temp_res = do.call(rbind.data.frame, temp_res)
+  names(temp_res) = c("nvar", "var_include", "tr_mse", "ts_mse", "formula")
+  temp_res$var_include = as.character(temp_res$var_include)
+  temp_res$formula = as.character(temp_res$formula)
+  varinclude = c(varinclude, as.character(temp_res[which.min(temp_res$ts_mse), 2]))
+  varexlude = varexlude[!(varexlude %in% varinclude)]
+  
+  fi_reg[[k]] = tem_reg[[which.min(temp_res$ts_mse)]]
+  fi_res[[k]] = c(temp_res[which.min(temp_res$ts_mse),])
+
+  k=k+1
+}    
+    
+    
+    
+    
+    
+fi_res = do.call(rbind.data.frame, fi_res)
+names(fi_res) = c("nvar", "var_include", "tr_mse", "ts_mse", "formula")
+forward_res = fi_res
+
+
+
+plot(fi_res$nvar, fi_res$tr_mse, type = "l", xlab = "Number of features", lwd = 2, col = 2,
+     ylab = "Training MSE")
+title("Training MSE for all subsets")
+
+
+plot(fi_res$nvar, fi_res$ts_mse, type = "l", xlab = "Number of features", lwd = 2, col = 2,
+     ylab = "Test MSE")
+title("Test MSE for all subsets")
+
+print(fi_res)
+
+print(fi_res[which.min(fi_res$ts_mse),])
+
+aa = which.min(fi_res$ts_mse)
+res_131 = fi_reg[[aa]]
+len1 = length(res_131$coefficients)
+print(paste("Forward Best Subset Model :", fi_res[aa,]$formula, ":   y^hat = ", round(res_131$coefficients[1], 3), " + " ,
+            paste(round(res_131$coefficients[2:len1], 3), 
+                  names(res_131$coefficients)[2:len1], sep = " * ", collapse = " + "),
+            "   with training MSE = ", round(fi_res[aa,3],3), 
+            " and validation MSE = ", round(fi_res[aa,4],3)))
+
+```
+
+
+
+Using forward search, based on validation MSE, the best model includes three variables (LSTAT, PTRATIO, CHAS).
+
+
+
+
+
+### (d)
+
+
+#### (ii)
+
+
+
+```{r}
+
+dt_train = dt[1:400,]
+dt_test = dt[401:dim(dt)[1],]
+varn = c("CRIM",    "ZN",      "INDUS",   "CHAS",    "NOX",     "RM",
+         "AGE",     "DIS",     "RAD",     "TAX",     "PTRATIO", "B" ,      "LSTAT")
+
+
+varinclude = varn
+varexlude = c()
+fi_res = list()
+fi_reg = list()
+k=2
+
+formu = paste("MEDV ~ 1", paste(varinclude, collapse = "+"), sep = "+")    
+tem_reg = lm(as.formula(formu), data = dt_train)
+temp_res = list(13, "None", 
+                mean(tem_reg$residuals^2), 
+                mean((predict(tem_reg, newdata = dt_test)-dt_test$MEDV)^2),
+                formu)
+
+
+fi_reg[[1]] = tem_reg
+fi_res[[1]] = c(temp_res)
+
+
+while (!is.null(varinclude) & length(varinclude)>0) {
+  tem_reg = list()
+  temp_res = list()
+  
+  
+  for (i in c(1:length(varinclude))){
+
+    if (is.null(varinclude) | length(varinclude)==1){
+      formu = "MEDV ~ 1"  
+    } else {
+      formu = paste("MEDV ~ 1", paste(varinclude[-i], collapse = "+"), sep = "+")    
+    }
+    
+    tem_reg[[i]] = lm(as.formula(formu), data = dt_train)
+    temp_res[[i]] = list(length(varinclude)-1, varinclude[i], 
+                         mean(tem_reg[[i]]$residuals^2), 
+                         mean((predict(tem_reg[[i]], newdata = dt_test)-dt_test$MEDV)^2),
+                         formu)
+    
+  }
+  
+  temp_res = do.call(rbind.data.frame, temp_res)
+  names(temp_res) = c("nvar", "var_exclude", "tr_mse", "ts_mse", "formula")
+  temp_res$var_exclude = as.character(temp_res$var_exclude)
+  temp_res$formula = as.character(temp_res$formula)
+  varexlude = c(varexlude, as.character(temp_res[which.min(temp_res$ts_mse), 2]))
+  varinclude = varinclude[!(varinclude %in% varexlude)]
+  
+  fi_reg[[k]] = tem_reg[[which.min(temp_res$ts_mse)]]
+  fi_res[[k]] = c(temp_res[which.min(temp_res$ts_mse),])
+  
+  k=k+1
+}    
+
+
+
+
+
+fi_res = do.call(rbind.data.frame, fi_res)
+names(fi_res) = c("nvar", "var_include", "tr_mse", "ts_mse", "formula")
+
+backward_res = fi_res
+
+
+plot(fi_res$nvar, fi_res$tr_mse, type = "l", xlab = "Number of features", lwd = 2, col = 2,
+     ylab = "Training MSE")
+title("Training MSE for all subsets")
+
+
+plot(fi_res$nvar, fi_res$ts_mse, type = "l", xlab = "Number of features", lwd = 2, col = 2,
+     ylab = "Test MSE")
+title("Test MSE for all subsets")
+
+print(fi_res)
+
+print(fi_res[which.min(fi_res$ts_mse),])
+
+aa = which.min(fi_res$ts_mse)
+res_131 = fi_reg[[aa]]
+len1 = length(res_131$coefficients)
+print(paste("For subset model ", fi_res[aa,]$formula, ":   y^hat = ", round(res_131$coefficients[1], 3), " + " ,
+            paste(round(res_131$coefficients[2:len1], 3), 
+                  names(res_131$coefficients)[2:len1], sep = " * ", collapse = " + "),
+            "   with training MSE = ", round(fi_res[aa,3],3), 
+            " and validation MSE = ", round(fi_res[aa,4],3)))
+
+```
+
+
+
+Using backward search, based on validation MSE, the best model includes only two variables (LSTAT, PTRATIO).
+
+
+
+
+
+
+### (d)
+
+
+#### (iii)
+
+
+
+```{r}
+print(forward_res)
+print(backward_res)
+```
+
+
+
+All lower order models are nested in the full model with all features. The best model found from backward search is nested within model found from forward search because forward model includes LSTAT, PTRATIO, CHAS variables and backward model includes only LSTAT, PTRATIO that can be found by considering CHAS coefficient equal zero.
+
+
+### (d)
+
+
+#### (iv)
+
+
+
+```{r}
+# Ridge
+
+dt_train = dt[1:400,]
+dt_test = dt[401:dim(dt)[1],]
+varn = c("CRIM",    "ZN",      "INDUS",   "CHAS",    "NOX",     "RM",
+         "AGE",     "DIS",     "RAD",     "TAX",     "PTRATIO", "B" ,      "LSTAT")
+
+lambda = 0
+l2_res = NULL
+
+loop = TRUE
+
+while (loop) {
+  a = glmnet(x = as.matrix(dt_train[,varn]), y = dt_train[,"MEDV"], standardize=FALSE, 
+             alpha = 0, lambda = lambda)
+  pred = predict(a, as.matrix(dt_test[,varn]))
+  l2 = mean((dt_test$MEDV - pred)^2) + lambda * sum(a$beta^2)
+  l2_res = rbind(l2_res, c(a$lambda, l2))
+  if (lambda <10){
+    lambda = lambda + .005
+  }else {
+    lambda = lambda + 100
+  }
+  
+  if(sum(a$beta^2) < 1e-5 | lambda > 1500000) loop = FALSE
+}
+
+l2_res = as.data.frame(l2_res)
+plot(l2_res$V1, l2_res$V2, type = "l", xlab = "Lambda", lwd = 2, col = 2, xlim = c(0, 10),
+     ylab = "L2 total complexity")
+title("Ridge (L2) Regression")
+
+plot(l2_res$V1, l2_res$V2, type = "l", xlab = "Lambda", lwd = 2, col = 2,
+     ylab = "L2 total complexity")
+title("Ridge (L2) Regression")
+
+
+aa = which.min(l2_res$V2)
+a = glmnet(x = as.matrix(dt_train[,varn]), y = dt_train[,"MEDV"], standardize=FALSE, 
+             alpha = 0, lambda = l2_res[aa,1])
+pred = predict(a, as.matrix(dt_test[,varn]))
+l2 = mean((dt_test$MEDV - pred)^2)
+
+print(paste("Model with lambda = ", round(l2_res[aa,1],3), ":   y^hat = ", round(a$a0, 3), 
+            " + " ,
+            paste(round(a$beta, 3), 
+                  row.names(a$beta), sep = " * ", collapse = " + "),
+    "   with testing MSE = ", round(l2,3)))
+
+print(paste("Model with lambda = ", l2_res[aa,1], " has lowest validation MSE, ", round(l2_res[aa,2],3)))
+```
+
+
+
+
+
+```{r}
+# LASSO
+
+lambda = 0
+l1_res = NULL
+
+loop = TRUE
+
+while (loop) {
+  a = glmnet(x = as.matrix(dt_train[,varn]), y = dt_train[,"MEDV"], standardize=FALSE, 
+             alpha = 1, lambda = lambda)
+  pred = predict(a, as.matrix(dt_test[,varn]))
+  l1 = mean((dt_test$MEDV - pred)^2) + lambda * sum(abs(a$beta))
+  l1_res = rbind(l1_res, c(a$lambda, l1))
+  lambda = lambda + 0.05
+  if(sum(abs(a$beta)) < 1e-8) loop = FALSE
+}
+
+l1_res = as.data.frame(l1_res)
+plot(l1_res$V1, l1_res$V2, type = "l", xlab = "Lambda", lwd = 2, col = 2,
+     ylab = "L1 total complexity")
+title("L1 Panalty")
+
+aa = which.min(l1_res$V2)
+a = glmnet(x = as.matrix(dt_train[,varn]), y = dt_train[,"MEDV"], standardize=FALSE, 
+             alpha = 1, lambda = l1_res[aa,1])
+pred = predict(a, as.matrix(dt_test[,varn]))
+mmse = mean((dt_test$MEDV - pred)^2)
+
+print(paste("Model with lambda = ", round(l1_res[aa,1],3), ":   y^hat = ", round(a$a0, 3), 
+            " + " ,
+            paste(round(a$beta, 5), 
+                  row.names(a$beta), sep = " * ", collapse = " + "),
+    "   with testing MSE = ", round(mmse,3)))
+
+print(paste("Model with lambda = ", round(l1_res[aa,1], 3), " has lowest validation MSE, ", round(mmse,3)))
+
+```
+
+
+
+Using Ridge regression best model found for $\lambda = 0.065$ which actually includes all variables with validation $MSE = 37.091$. On the other hand, best LASSO model found fro $\lambda = 5.1$ with validation $MSE = 19.898$ which includes only ZN, AGE, TAX, B and LSTAT and it is mach lower that Ridge regression. However, forward search model includes only LSTAT, PTRATIO, CHAS variables with validation $MSE = 16.552$ and it is the lowest MSE among forward, backward, Ridge and LASSO models.
+
+
+
+
+
+
+
+
